@@ -58,26 +58,53 @@ pub trait Reg {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum Reg8 {
+pub enum Reg8Legacy {
     Al, Bl, Cl, Dl,
     Ah, Bh, Ch, Dh,
+}
+
+impl Reg for Reg8Legacy {
+    fn code(self) -> u8 {
+        match self {
+            Reg8Legacy::Al => 0x0,
+            Reg8Legacy::Cl => 0x1,
+            Reg8Legacy::Dl => 0x2,
+            Reg8Legacy::Bl => 0x3,
+            Reg8Legacy::Ah => 0x4,
+            Reg8Legacy::Ch => 0x5,
+            Reg8Legacy::Dh => 0x6,
+            Reg8Legacy::Bh => 0x7,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum Reg8 {
+    Al, Bl, Cl, Dl,
     Spl, Bpl, Sil, Dil,
-    R8l, R9l, R10l, R11l,
-    R12l, R13l, R14l, R15l,
+    R8b, R9b, R10b, R11b,
+    R12b, R13b, R14b, R15b,
 }
 
 impl Reg for Reg8 {
     fn code(self) -> u8 {
         match self {
             Al => 0x0,
+            Bl => 0x3,
             Cl => 0x1,
             Dl => 0x2,
-            Bl => 0x3,
-            Ah => 0x4,
-            Ch => 0x5,
-            Dh => 0x6,
-            Bh => 0x7,
-            _ => panic!(),
+            Spl => 0x4,
+            Bpl => 0x5,
+            Sil => 0x6,
+            Dil => 0x7,
+            R8b => 0x8,
+            R9b => 0x9,
+            R10b => 0xa,
+            R11b => 0xb,
+            R12b => 0xc,
+            R13b => 0xd,
+            R14b => 0xe,
+            R15b => 0xf,
         }
     }
 }
@@ -155,6 +182,15 @@ enum Mode {
     Direct,
 }
 
+fn encode_modrm<RegX: Reg>(mode: Mode, source: RegX, destination: RegX) -> u8 {
+    let mode_bits = match mode {
+        Mode::Direct => 0xc0,
+    };
+    let destination_bits = (destination.code() & 0x7) << 3;
+    let source_bits = source.code();
+    mode_bits | destination_bits | source_bits
+}
+
 fn encode_modrm_ext<RegX: Reg>(mode: Mode, ext: u8, reg: RegX) -> u8 {
     let mode_bits = match mode {
         Mode::Direct => 0xc0,
@@ -162,6 +198,11 @@ fn encode_modrm_ext<RegX: Reg>(mode: Mode, ext: u8, reg: RegX) -> u8 {
     let ext_bits = ext << 3;
     let reg_bits = reg.code() & 0x7;
     mode_bits | ext_bits | reg_bits
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub struct Mem8Legacy {
+    displacement: u8,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -186,33 +227,38 @@ pub struct Mem64 {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Insn {
-    Add8(Reg8, Reg8),
-    Add16(Reg16, Reg16),
-    Add32(Reg32, Reg32),
-    Add64(Reg64, Reg64),
+    Add8Legacy(Reg8Legacy, Reg8Legacy),
+    // Add8(Reg8, Reg8),
+    // Add16(Reg16, Reg16),
+    // Add32(Reg32, Reg32),
+    // Add64(Reg64, Reg64),
 
-    AddLoad8(Mem8, Reg8),
-    AddLoad16(Mem16, Reg16),
-    AddLoad32(Mem32, Reg32),
-    AddLoad64(Mem64, Reg64),
-    AddLoadSym(Symbol, Reg64),
+    // AddLoad8Legacy(Mem8Legacy, Reg8Legacy),
+    // AddLoad8(Mem8, Reg8),
+    // AddLoad16(Mem16, Reg16),
+    // AddLoad32(Mem32, Reg32),
+    // AddLoad64(Mem64, Reg64),
+    // AddLoadSym(Symbol, Reg64),
 
-    AddStore8(Reg8, Mem8),
-    AddStore16(Reg16, Mem16),
-    AddStore32(Reg32, Mem32),
-    AddStore64(Reg64, Mem64),
-    AddStoreSym(Reg64, Symbol),
+    // AddStore8Legacy(Reg8Legacy, Mem8Legacy),
+    // AddStore8(Reg8, Mem8),
+    // AddStore16(Reg16, Mem16),
+    // AddStore32(Reg32, Mem32),
+    // AddStore64(Reg64, Mem64),
+    // AddStoreSym(Reg64, Symbol),
 
-    AddLoadImm8(u8, Reg8),
-    AddLoadImm16(u16, Reg16),
-    AddLoadImm32(u32, Reg32),
-    AddLoadImm64(u32, Reg64),
+    // AddLoadImm8Legacy(u8, Reg8Legacy),
+    // AddLoadImm8(u8, Reg8),
+    // AddLoadImm16(u16, Reg16),
+    // AddLoadImm32(u32, Reg32),
+    // AddLoadImm64(u32, Reg64),
 
-    AddStoreImm8(u8, Mem8),
-    AddStoreImm16(u16, Mem8),
-    AddStoreImm32(u32, Mem32),
-    AddStoreImm64(u32, Mem64),
-    AddStoreImmSym(u32, Symbol),
+    // AddStoreImm8Legacy(u8, Mem8Legacy),
+    // AddStoreImm8(u8, Mem8),
+    // AddStoreImm16(u16, Mem8),
+    // AddStoreImm32(u32, Mem32),
+    // AddStoreImm64(u32, Mem64),
+    // AddStoreImmSym(u32, Symbol),
 
     PushReg16(Reg16),
     PushReg64(Reg64),
@@ -225,6 +271,11 @@ pub enum Insn {
 impl Insn {
     pub fn encode(&self, buffer: &mut Vec<u8>) {
         match self {
+            &Add8Legacy(source, destination) => {
+                buffer.push(0x00);
+                buffer.push(encode_modrm(Mode::Direct, destination, source))
+            },
+
             &PushReg16(reg) => {
                 buffer.push(0x66);
                 Rex::derive_1(reg).map(|rex| buffer.push(rex.code()));
@@ -255,8 +306,6 @@ impl Insn {
             }
 
             &ReturnNear => buffer.push(0xc2),
-
-            _ => panic!(),
         }
     }
 }
@@ -269,6 +318,13 @@ macro_rules! assert_encode {
             assert_eq!(buffer, vec![$($bytes),+]);
         }
     }
+}
+
+#[test]
+fn test_encode_add8legacy() {
+    assert_encode!(Add8Legacy(Reg8Legacy::Al, Reg8Legacy::Al), 0x00, 0xc0);
+    assert_encode!(Add8Legacy(Reg8Legacy::Al, Reg8Legacy::Bl), 0x00, 0xc3);
+    assert_encode!(Add8Legacy(Reg8Legacy::Dl, Reg8Legacy::Ah), 0x00, 0xd4);
 }
 
 #[test]
