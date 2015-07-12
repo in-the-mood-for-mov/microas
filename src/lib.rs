@@ -86,6 +86,15 @@ pub enum Reg8 {
     R12b, R13b, R14b, R15b,
 }
 
+impl Reg8 {
+    fn rex(self) -> Option<Rex> {
+        match self {
+            Spl | Bpl | Sil | Dil => Some(Rex::NewReg8),
+            _ => None,
+        }
+    }
+}
+
 impl Reg for Reg8 {
     fn code(self) -> u8 {
         match self {
@@ -228,7 +237,7 @@ pub struct Mem64 {
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Insn {
     Add8Legacy(Reg8Legacy, Reg8Legacy),
-    // Add8(Reg8, Reg8),
+    Add8(Reg8, Reg8),
     // Add16(Reg16, Reg16),
     // Add32(Reg32, Reg32),
     // Add64(Reg64, Reg64),
@@ -272,6 +281,14 @@ impl Insn {
     pub fn encode(&self, buffer: &mut Vec<u8>) {
         match self {
             &Add8Legacy(source, destination) => {
+                buffer.push(0x00);
+                buffer.push(encode_modrm(Mode::Direct, destination, source))
+            },
+
+            &Add8(source, destination) => {
+                source.rex()
+                    .or_else(|| destination.rex())
+                    .map(|rex| buffer.push(rex.code()));
                 buffer.push(0x00);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
             },
@@ -325,6 +342,13 @@ fn test_encode_add8legacy() {
     assert_encode!(Add8Legacy(Reg8Legacy::Al, Reg8Legacy::Al), 0x00, 0xc0);
     assert_encode!(Add8Legacy(Reg8Legacy::Al, Reg8Legacy::Bl), 0x00, 0xc3);
     assert_encode!(Add8Legacy(Reg8Legacy::Dl, Reg8Legacy::Ah), 0x00, 0xd4);
+}
+
+#[test]
+fn test_encode_add8() {
+    assert_encode!(Add8(Al, Al), 0x00, 0xc0);
+    assert_encode!(Add8(Al, Bl), 0x00, 0xc3);
+    assert_encode!(Add8(Dl, Spl), 0x40, 0x00, 0xd4);
 }
 
 #[test]
