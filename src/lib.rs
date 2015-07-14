@@ -15,8 +15,12 @@ pub struct Symbol(u64);
 enum Rex {
     NewReg8,
     B,
+    R,
+    BR,
     W,
     BW,
+    RW,
+    BRW,
 }
 
 impl Rex {
@@ -28,12 +32,26 @@ impl Rex {
         }
     }
 
+    fn derive<RegX: Reg>(destination: RegX, source: RegX) -> Option<Rex> {
+        match (destination.code(), source.code()) {
+            (0x0...0x07, 0x0...0x07) => None,
+            (0x0...0x07, _) => Some(Rex::R),
+            (_, 0x0...0x07) => Some(Rex::B),
+            _ => Some(Rex::BR),
+
+        }
+    }
+
     fn code(self) -> u8 {
         match self {
             Rex::NewReg8 => 0x40,
             Rex::B => 0x41,
+            Rex::R => 0x44,
+            Rex::BR => 0x45,
             Rex::W => 0x48,
             Rex::BW => 0x49,
+            Rex::RW => 0x4c,
+            Rex::BRW => 0x4d,
         }
     }
 }
@@ -41,14 +59,16 @@ impl Rex {
 impl std::ops::BitOr for Rex {
     type Output = Rex;
     fn bitor(self, other: Rex) -> Rex {
-        match (self, other) {
-            (Rex::NewReg8, _) => other,
-            (_, Rex::NewReg8) => self,
-            (Rex::B, Rex::B) => Rex::B,
-            (Rex::W, Rex::W) => Rex::W,
-            (Rex::B, Rex::W) | (Rex::W, Rex::B) => Rex::BW,
-            (Rex::BW, _) => Rex::BW,
-            (_ ,Rex::BW) => Rex::BW,
+        match self.code() | other.code() {
+            0x40 => Rex::NewReg8,
+            0x41 => Rex::B,
+            0x44 => Rex::R,
+            0x45 => Rex::BR,
+            0x48 => Rex::W,
+            0x49 => Rex::BW,
+            0x4c => Rex::RW,
+            0x4d => Rex::BRW,
+            _ => panic!(),
         }
     }
 }
@@ -196,7 +216,7 @@ fn encode_modrm<RegX: Reg>(mode: Mode, source: RegX, destination: RegX) -> u8 {
         Mode::Direct => 0xc0,
     };
     let destination_bits = (destination.code() & 0x7) << 3;
-    let source_bits = source.code();
+    let source_bits = source.code() & 0x7;
     mode_bits | destination_bits | source_bits
 }
 
@@ -238,7 +258,7 @@ pub struct Mem64 {
 pub enum Insn {
     Add8Legacy(Reg8Legacy, Reg8Legacy),
     Add8(Reg8, Reg8),
-    // Add16(Reg16, Reg16),
+    Add16(Reg16, Reg16),
     // Add32(Reg32, Reg32),
     // Add64(Reg64, Reg64),
 
@@ -292,6 +312,13 @@ impl Insn {
                 buffer.push(0x00);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
             },
+
+            &Add16(source, destination) => {
+                buffer.push(0x66);
+                Rex::derive(destination, source).map(|rex| buffer.push(rex.code()));
+                buffer.push(0x01);
+                buffer.push(encode_modrm(Mode::Direct, destination, source))
+            }
 
             &PushReg16(reg) => {
                 buffer.push(0x66);
@@ -349,6 +376,15 @@ fn test_encode_add8() {
     assert_encode!(Add8(Al, Al), 0x00, 0xc0);
     assert_encode!(Add8(Al, Bl), 0x00, 0xc3);
     assert_encode!(Add8(Dl, Spl), 0x40, 0x00, 0xd4);
+}
+
+#[test]
+fn test_encode_add16() {
+    assert_encode!(Add16(Ax, Ax), 0x66, 0x01, 0xc0);
+    assert_encode!(Add16(Ax, R8w), 0x66, 0x41, 0x01, 0xc0);
+    assert_encode!(Add16(R8w, Ax), 0x66, 0x44, 0x01, 0xc0);
+    assert_encode!(Add16(R8w, R8w), 0x66, 0x45, 0x01, 0xc0);
+    assert_encode!(Add16(Sp, R14w), 0x66, 0x41, 0x01, 0xe6);
 }
 
 #[test]
