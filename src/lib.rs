@@ -152,6 +152,31 @@ impl Reg for Reg16 {
 pub enum Reg32 {
     Eax, Ebx, Ecx, Edx,
     Esp, Ebp, Esi, Edi,
+    R8d, R9d, R10d, R11d,
+    R12d, R13d, R14d, R15d,
+}
+
+impl Reg for Reg32 {
+    fn code(self) -> u8 {
+        match self {
+            Eax => 0x0,
+            Ecx => 0x1,
+            Edx => 0x2,
+            Ebx => 0x3,
+            Esp => 0x4,
+            Ebp => 0x5,
+            Esi => 0x6,
+            Edi => 0x7,
+            R8d => 0x8,
+            R9d => 0x9,
+            R10d => 0xa,
+            R11d => 0xb,
+            R12d => 0xc,
+            R13d => 0xd,
+            R14d => 0xe,
+            R15d => 0xf,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -238,8 +263,8 @@ pub enum Insn {
     Add8Legacy(Reg8Legacy, Reg8Legacy),
     Add8(Reg8, Reg8),
     Add16(Reg16, Reg16),
-    // Add32(Reg32, Reg32),
-    // Add64(Reg64, Reg64),
+    Add32(Reg32, Reg32),
+    Add64(Reg64, Reg64),
 
     // AddLoad8Legacy(Mem8Legacy, Reg8Legacy),
     // AddLoad8(Mem8, Reg8),
@@ -294,6 +319,20 @@ impl Insn {
             &Add16(source, destination) => {
                 buffer.push(0x66);
                 Rex::for_pair(destination, source).code()
+                    .map(|code| buffer.push(code));
+                buffer.push(0x01);
+                buffer.push(encode_modrm(Mode::Direct, destination, source))
+            },
+
+            &Add32(source, destination) => {
+                Rex::for_pair(destination, source).code()
+                    .map(|code| buffer.push(code));
+                buffer.push(0x01);
+                buffer.push(encode_modrm(Mode::Direct, destination, source))
+            }
+
+            &Add64(source, destination) => {
+                (Rex::for_pair(destination, source) | REX_W).code()
                     .map(|code| buffer.push(code));
                 buffer.push(0x01);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
@@ -361,6 +400,24 @@ fn test_encode_add16() {
     assert_encode!(Add16(R8w, Ax), 0x66, 0x44, 0x01, 0xc0);
     assert_encode!(Add16(R8w, R8w), 0x66, 0x45, 0x01, 0xc0);
     assert_encode!(Add16(Sp, R14w), 0x66, 0x41, 0x01, 0xe6);
+}
+
+#[test]
+fn test_encode_add32() {
+    assert_encode!(Add32(Eax, Eax), 0x01, 0xc0);
+    assert_encode!(Add32(Eax, R8d), 0x41, 0x01, 0xc0);
+    assert_encode!(Add32(R8d, Eax), 0x44, 0x01, 0xc0);
+    assert_encode!(Add32(R8d, R8d), 0x45, 0x01, 0xc0);
+    assert_encode!(Add32(Esp, R14d), 0x41, 0x01, 0xe6);
+}
+
+#[test]
+fn test_encode_add64() {
+    assert_encode!(Add64(Rax, Rax), 0x48, 0x01, 0xc0);
+    assert_encode!(Add64(Rax, R8), 0x49, 0x01, 0xc0);
+    assert_encode!(Add64(R8, Rax), 0x4c, 0x01, 0xc0);
+    assert_encode!(Add64(R8, R8), 0x4d, 0x01, 0xc0);
+    assert_encode!(Add64(Rsp, R14), 0x49, 0x01, 0xe6);
 }
 
 #[test]
