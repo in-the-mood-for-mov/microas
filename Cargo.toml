@@ -1,7 +1,10 @@
 [package]
+
 name = "µas"
 version = "0.1.0"
 authors = ["Simon Génier <simon@webscale.money>"]
 
 [dependencies]
+
 libc = "0.1"
+bitflags = "0.3"

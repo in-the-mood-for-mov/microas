@@ -1,3 +1,4 @@
+#[macro_use] extern crate bitflags;
 extern crate libc;
 
 use self::Insn::*;
@@ -11,64 +12,42 @@ pub type Word = u64;
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Symbol(u64);
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum Rex {
-    NewReg8,
-    B,
-    R,
-    BR,
-    W,
-    BW,
-    RW,
-    BRW,
+bitflags! {
+    flags Rex: u8 {
+        const REX_NIL = 0x0,
+        const REX = 0x40,
+        const REX_B = 0x41,
+        const REX_X = 0x42,
+        const REX_R = 0x44,
+        const REX_W = 0x48,
+    }
 }
 
 impl Rex {
-    fn derive_1<RegX: Reg>(reg: RegX) -> Option<Rex> {
-        if reg.code() > 0x7 {
-            Some(Rex::B)
+    fn for_destination<RegX: Reg>(destination: RegX) -> Rex {
+        if destination.code() > 0x7 {
+            REX_B
         } else {
-            None
+            REX_NIL
         }
     }
 
-    fn derive<RegX: Reg>(destination: RegX, source: RegX) -> Option<Rex> {
-        match (destination.code(), source.code()) {
-            (0x0...0x07, 0x0...0x07) => None,
-            (0x0...0x07, _) => Some(Rex::R),
-            (_, 0x0...0x07) => Some(Rex::B),
-            _ => Some(Rex::BR),
-
+    fn for_source<RegX: Reg>(source: RegX) -> Rex {
+        if source.code() > 0x7 {
+            REX_R
+        } else {
+            REX_NIL
         }
     }
 
-    fn code(self) -> u8 {
+    fn for_pair<RegX: Reg>(destination: RegX, source: RegX) -> Rex {
+        Rex::for_destination(destination) | Rex::for_source(source)
+    }
+
+    fn code(self) -> Option<u8> {
         match self {
-            Rex::NewReg8 => 0x40,
-            Rex::B => 0x41,
-            Rex::R => 0x44,
-            Rex::BR => 0x45,
-            Rex::W => 0x48,
-            Rex::BW => 0x49,
-            Rex::RW => 0x4c,
-            Rex::BRW => 0x4d,
-        }
-    }
-}
-
-impl std::ops::BitOr for Rex {
-    type Output = Rex;
-    fn bitor(self, other: Rex) -> Rex {
-        match self.code() | other.code() {
-            0x40 => Rex::NewReg8,
-            0x41 => Rex::B,
-            0x44 => Rex::R,
-            0x45 => Rex::BR,
-            0x48 => Rex::W,
-            0x49 => Rex::BW,
-            0x4c => Rex::RW,
-            0x4d => Rex::BRW,
-            _ => panic!(),
+            REX_NIL => None,
+            rex => Some(rex.bits),
         }
     }
 }
@@ -107,10 +86,10 @@ pub enum Reg8 {
 }
 
 impl Reg8 {
-    fn rex(self) -> Option<Rex> {
+    fn rex(self) -> Rex {
         match self {
-            Spl | Bpl | Sil | Dil => Some(Rex::NewReg8),
-            _ => None,
+            Spl | Bpl | Sil | Dil => REX,
+            _ => REX_NIL,
         }
     }
 }
@@ -306,37 +285,34 @@ impl Insn {
             },
 
             &Add8(source, destination) => {
-                source.rex()
-                    .or_else(|| destination.rex())
-                    .map(|rex| buffer.push(rex.code()));
+                (source.rex() | destination.rex()).code()
+                    .map(|code| buffer.push(code));
                 buffer.push(0x00);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
             },
 
             &Add16(source, destination) => {
                 buffer.push(0x66);
-                Rex::derive(destination, source).map(|rex| buffer.push(rex.code()));
+                Rex::for_pair(destination, source).code()
+                    .map(|code| buffer.push(code));
                 buffer.push(0x01);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
             }
 
             &PushReg16(reg) => {
                 buffer.push(0x66);
-                Rex::derive_1(reg).map(|rex| buffer.push(rex.code()));
+                Rex::for_destination(reg).code().map(|code| buffer.push(code));
                 buffer.push(reg.code() & 0x7 | 0x50);
             },
 
             &PushReg64(reg) => {
-                Rex::derive_1(reg).map(|rex| buffer.push(rex.code()));
+                Rex::for_destination(reg).code().map(|code| buffer.push(code));
                 buffer.push(reg.code() & 0x07 | 0x50);
             }
 
             &MovLoadImm64(imm, reg) => {
-                if let Some(rex) = Rex::derive_1(reg) {
-                    buffer.push((rex | Rex::W).code());
-                } else {
-                    buffer.push(Rex::W.code());
-                }
+                (Rex::for_destination(reg) | REX_W).code()
+                    .map(|code| buffer.push(code));
                 buffer.push(0xc7);
                 buffer.push(encode_modrm_ext(Mode::Direct, 0x00, reg));
                 if imm < 0x0000_0001_0000_0000 {
