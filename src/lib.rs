@@ -1,5 +1,6 @@
-#[macro_use] extern crate bitflags;
-extern crate libc;
+#[macro_use]
+extern crate bitflags;
+extern crate memmap;
 
 use self::Insn::*;
 use self::Reg8::*;
@@ -58,8 +59,14 @@ pub trait Reg {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Reg8Legacy {
-    Al, Bl, Cl, Dl,
-    Ah, Bh, Ch, Dh,
+    Al,
+    Bl,
+    Cl,
+    Dl,
+    Ah,
+    Bh,
+    Ch,
+    Dh,
 }
 
 impl Reg for Reg8Legacy {
@@ -79,10 +86,22 @@ impl Reg for Reg8Legacy {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Reg8 {
-    Al, Bl, Cl, Dl,
-    Spl, Bpl, Sil, Dil,
-    R8b, R9b, R10b, R11b,
-    R12b, R13b, R14b, R15b,
+    Al,
+    Bl,
+    Cl,
+    Dl,
+    Spl,
+    Bpl,
+    Sil,
+    Dil,
+    R8b,
+    R9b,
+    R10b,
+    R11b,
+    R12b,
+    R13b,
+    R14b,
+    R15b,
 }
 
 impl Reg8 {
@@ -119,10 +138,22 @@ impl Reg for Reg8 {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Reg16 {
-    Ax, Bx, Cx, Dx,
-    Sp, Bp, Si, Di,
-    R8w, R9w, R10w, R11w,
-    R12w, R13w, R14w, R15w,
+    Ax,
+    Bx,
+    Cx,
+    Dx,
+    Sp,
+    Bp,
+    Si,
+    Di,
+    R8w,
+    R9w,
+    R10w,
+    R11w,
+    R12w,
+    R13w,
+    R14w,
+    R15w,
 }
 
 impl Reg for Reg16 {
@@ -150,10 +181,22 @@ impl Reg for Reg16 {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Reg32 {
-    Eax, Ebx, Ecx, Edx,
-    Esp, Ebp, Esi, Edi,
-    R8d, R9d, R10d, R11d,
-    R12d, R13d, R14d, R15d,
+    Eax,
+    Ebx,
+    Ecx,
+    Edx,
+    Esp,
+    Ebp,
+    Esi,
+    Edi,
+    R8d,
+    R9d,
+    R10d,
+    R11d,
+    R12d,
+    R13d,
+    R14d,
+    R15d,
 }
 
 impl Reg for Reg32 {
@@ -181,10 +224,22 @@ impl Reg for Reg32 {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Reg64 {
-    Rax, Rcx, Rdx, Rbx,
-    Rsp, Rbp, Rsi, Rdi,
-    R8, R9, R10, R11,
-    R12, R13, R14, R15,
+    Rax,
+    Rcx,
+    Rdx,
+    Rbx,
+    Rsp,
+    Rbp,
+    Rsi,
+    Rdi,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
 }
 
 impl Reg for Reg64 {
@@ -272,27 +327,26 @@ pub enum Insn {
     // AddLoad32(Mem32, Reg32),
     // AddLoad64(Mem64, Reg64),
     // AddLoadSym(Symbol, Reg64),
-
+    //
     // AddStore8Legacy(Reg8Legacy, Mem8Legacy),
     // AddStore8(Reg8, Mem8),
     // AddStore16(Reg16, Mem16),
     // AddStore32(Reg32, Mem32),
     // AddStore64(Reg64, Mem64),
     // AddStoreSym(Reg64, Symbol),
-
+    //
     // AddLoadImm8Legacy(u8, Reg8Legacy),
     // AddLoadImm8(u8, Reg8),
     // AddLoadImm16(u16, Reg16),
     // AddLoadImm32(u32, Reg32),
     // AddLoadImm64(u32, Reg64),
-
+    //
     // AddStoreImm8Legacy(u8, Mem8Legacy),
     // AddStoreImm8(u8, Mem8),
     // AddStoreImm16(u16, Mem8),
     // AddStoreImm32(u32, Mem32),
     // AddStoreImm64(u32, Mem64),
     // AddStoreImmSym(u32, Symbol),
-
     PushReg16(Reg16),
     PushReg64(Reg64),
 
@@ -307,32 +361,36 @@ impl Insn {
             &Add8Legacy(source, destination) => {
                 buffer.push(0x00);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
-            },
+            }
 
             &Add8(source, destination) => {
-                (source.rex() | destination.rex()).code()
+                (source.rex() | destination.rex())
+                    .code()
                     .map(|code| buffer.push(code));
                 buffer.push(0x00);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
-            },
+            }
 
             &Add16(source, destination) => {
                 buffer.push(0x66);
-                Rex::for_pair(destination, source).code()
+                Rex::for_pair(destination, source)
+                    .code()
                     .map(|code| buffer.push(code));
                 buffer.push(0x01);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
-            },
+            }
 
             &Add32(source, destination) => {
-                Rex::for_pair(destination, source).code()
+                Rex::for_pair(destination, source)
+                    .code()
                     .map(|code| buffer.push(code));
                 buffer.push(0x01);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
             }
 
             &Add64(source, destination) => {
-                (Rex::for_pair(destination, source) | REX_W).code()
+                (Rex::for_pair(destination, source) | REX_W)
+                    .code()
                     .map(|code| buffer.push(code));
                 buffer.push(0x01);
                 buffer.push(encode_modrm(Mode::Direct, destination, source))
@@ -342,7 +400,7 @@ impl Insn {
                 buffer.push(0x66);
                 Rex::for_destination(reg).code().map(|code| buffer.push(code));
                 buffer.push(reg.code() & 0x7 | 0x50);
-            },
+            }
 
             &PushReg64(reg) => {
                 Rex::for_destination(reg).code().map(|code| buffer.push(code));
@@ -350,7 +408,8 @@ impl Insn {
             }
 
             &MovLoadImm64(imm, reg) => {
-                (Rex::for_destination(reg) | REX_W).code()
+                (Rex::for_destination(reg) | REX_W)
+                    .code()
                     .map(|code| buffer.push(code));
                 buffer.push(0xc7);
                 buffer.push(encode_modrm_ext(Mode::Direct, 0x00, reg));
@@ -467,13 +526,62 @@ fn test_encode_return_near() {
 
 #[test]
 fn test_encode_mov_load_imm_64() {
-    assert_encode!(MovLoadImm64(0, Rax), 0x48, 0xc7, 0xc0, 0x00, 0x00, 0x00, 0x00);
-    assert_encode!(MovLoadImm64(1, Rax), 0x48, 0xc7, 0xc0, 0x01, 0x00, 0x00, 0x00);
-    assert_encode!(MovLoadImm64(0x01234567, Rax), 0x48, 0xc7, 0xc0, 0x67, 0x45, 0x23, 0x01);
-    assert_encode!(MovLoadImm64(0x01234567, Rbx), 0x48, 0xc7, 0xc3, 0x67, 0x45, 0x23, 0x01);
-    assert_encode!(MovLoadImm64(0x01234567, Rcx), 0x48, 0xc7, 0xc1, 0x67, 0x45, 0x23, 0x01);
-    assert_encode!(MovLoadImm64(0x01234567, Rdx), 0x48, 0xc7, 0xc2, 0x67, 0x45, 0x23, 0x01);
-    assert_encode!(MovLoadImm64(0x01234567, R8), 0x49, 0xc7, 0xc0, 0x67, 0x45, 0x23, 0x01);
+    assert_encode!(MovLoadImm64(0, Rax),
+                   0x48,
+                   0xc7,
+                   0xc0,
+                   0x00,
+                   0x00,
+                   0x00,
+                   0x00);
+    assert_encode!(MovLoadImm64(1, Rax),
+                   0x48,
+                   0xc7,
+                   0xc0,
+                   0x01,
+                   0x00,
+                   0x00,
+                   0x00);
+    assert_encode!(MovLoadImm64(0x01234567, Rax),
+                   0x48,
+                   0xc7,
+                   0xc0,
+                   0x67,
+                   0x45,
+                   0x23,
+                   0x01);
+    assert_encode!(MovLoadImm64(0x01234567, Rbx),
+                   0x48,
+                   0xc7,
+                   0xc3,
+                   0x67,
+                   0x45,
+                   0x23,
+                   0x01);
+    assert_encode!(MovLoadImm64(0x01234567, Rcx),
+                   0x48,
+                   0xc7,
+                   0xc1,
+                   0x67,
+                   0x45,
+                   0x23,
+                   0x01);
+    assert_encode!(MovLoadImm64(0x01234567, Rdx),
+                   0x48,
+                   0xc7,
+                   0xc2,
+                   0x67,
+                   0x45,
+                   0x23,
+                   0x01);
+    assert_encode!(MovLoadImm64(0x01234567, R8),
+                   0x49,
+                   0xc7,
+                   0xc0,
+                   0x67,
+                   0x45,
+                   0x23,
+                   0x01);
 }
 
 #[test]
@@ -487,18 +595,16 @@ fn lets_run_some_instructions() {
         ReturnNear.encode(&mut buffer);
 
         let size = 4 << 10;
-        let arena = libc::mmap(
-            ptr::null_mut(),
-            size,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANON,
-            -1,
-            0,
-        );
-        ptr::copy_nonoverlapping(buffer.as_ptr(), arena as *mut u8, buffer.len());
-        libc::mprotect(arena, size, libc::PROT_READ | libc::PROT_EXEC);
-        let function: extern "C" fn() -> u64 = mem::transmute(arena);
-        assert_eq!(function(), 42);
-        libc::munmap(arena, size);
+        let mut memmap = memmap::Mmap::anonymous(size, memmap::Protection::ReadWrite).unwrap();
+        {
+            let arena = memmap.mut_ptr();
+            ptr::copy_nonoverlapping(buffer.as_ptr(), arena, buffer.len());
+        }
+        memmap.set_protection(memmap::Protection::ReadExecute).unwrap();
+        {
+            let arena = memmap.ptr();
+            let function: extern "C" fn() -> u64 = mem::transmute(arena);
+            assert_eq!(function(), 42);
+        }
     }
 }

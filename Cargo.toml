@@ -6,5 +6,5 @@ authors = ["Simon Génier <simon@webscale.money>"]
 
 [dependencies]
 
-libc = "0.1"
-bitflags = "0.3"
+bitflags = "^0.7"
+memmap = "^0.4"
