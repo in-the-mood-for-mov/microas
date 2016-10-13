@@ -34,11 +34,7 @@ impl Rex {
     }
 
     fn for_source<RegX: Reg>(source: RegX) -> Rex {
-        if source.code() > 0x7 {
-            REX_R
-        } else {
-            REX_NIL
-        }
+        if source.code() > 0x7 { REX_R } else { REX_NIL }
     }
 
     fn for_pair<RegX: Reg>(destination: RegX, source: RegX) -> Rex {
